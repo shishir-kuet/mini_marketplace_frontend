@@ -2,11 +2,33 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getProductById, deleteProduct } from '../api/products'
 import { placeOrder } from '../api/orders'
+import {
+  getProductReviews,
+  getProductReviewSummary,
+  createReview,
+  updateReview,
+  deleteReview,
+} from '../api/reviews'
 import { useAuth } from '../context/AuthContext'
 import Spinner from '../components/Spinner'
 
 function formatPrice(n) {
   return new Intl.NumberFormat('en-BD', { style: 'currency', currency: 'BDT', maximumFractionDigits: 0 }).format(n)
+}
+
+function getReviewUsername(review) {
+  return review.reviewerUsername || review.userUsername || review.username || review.user?.username || 'User'
+}
+
+function formatReviewDate(dateString) {
+  if (!dateString) return 'Unknown date'
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return 'Unknown date'
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function getErrorMessage(err, fallbackMessage) {
+  return err.response?.data?.error || err.response?.data?.message || fallbackMessage
 }
 
 export default function ProductDetail() {
@@ -22,12 +44,45 @@ export default function ProductDetail() {
   const [orderMsg, setOrderMsg] = useState('')
   const [orderError, setOrderError] = useState('')
 
+  const [reviews, setReviews] = useState([])
+  const [summary, setSummary] = useState(null)
+  const [reviewLoading, setReviewLoading] = useState(true)
+  const [reviewError, setReviewError] = useState('')
+
+  const [rating, setRating] = useState(5)
+  const [comment, setComment] = useState('')
+  const [editingReviewId, setEditingReviewId] = useState(null)
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [reviewFormError, setReviewFormError] = useState('')
+  const [reviewSuccess, setReviewSuccess] = useState('')
+
   useEffect(() => {
     getProductById(id)
       .then(r => setProduct(r.data))
       .catch(() => setError('Product not found.'))
       .finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => {
+    loadReviews()
+  }, [id])
+
+  async function loadReviews() {
+    setReviewLoading(true)
+    setReviewError('')
+    try {
+      const [reviewsRes, summaryRes] = await Promise.all([
+        getProductReviews(id),
+        getProductReviewSummary(id),
+      ])
+      setReviews(reviewsRes.data || [])
+      setSummary(summaryRes.data || null)
+    } catch (err) {
+      setReviewError(getErrorMessage(err, 'Failed to load reviews.'))
+    } finally {
+      setReviewLoading(false)
+    }
+  }
 
   async function handleOrder() {
     if (!isAuthenticated) { navigate('/login'); return }
@@ -54,6 +109,63 @@ export default function ProductDetail() {
     }
   }
 
+  async function handleReviewSubmit(e) {
+    e.preventDefault()
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
+
+    setSubmittingReview(true)
+    setReviewFormError('')
+    setReviewSuccess('')
+
+    try {
+      if (editingReviewId) {
+        await updateReview(editingReviewId, { rating, comment: comment.trim() })
+        setReviewSuccess('Review updated successfully.')
+      } else {
+        await createReview({ productId: Number(id), rating, comment: comment.trim() })
+        setReviewSuccess('Review submitted successfully.')
+      }
+
+      setComment('')
+      setRating(5)
+      setEditingReviewId(null)
+      await loadReviews()
+    } catch (err) {
+      setReviewFormError(getErrorMessage(err, 'Failed to save review.'))
+    } finally {
+      setSubmittingReview(false)
+    }
+  }
+
+  function startEditReview(review) {
+    setEditingReviewId(review.id)
+    setRating(review.rating || 5)
+    setComment(review.comment || '')
+    setReviewFormError('')
+    setReviewSuccess('')
+  }
+
+  function cancelEditReview() {
+    setEditingReviewId(null)
+    setRating(5)
+    setComment('')
+    setReviewFormError('')
+  }
+
+  async function handleDeleteReview(reviewId) {
+    if (!window.confirm('Delete this review?')) return
+    try {
+      await deleteReview(reviewId)
+      if (editingReviewId === reviewId) cancelEditReview()
+      await loadReviews()
+    } catch (err) {
+      setReviewFormError(getErrorMessage(err, 'Failed to delete review.'))
+    }
+  }
+
   if (loading) return <Spinner />
   if (error) return (
     <div className="page"><div className="container">
@@ -64,6 +176,8 @@ export default function ProductDetail() {
 
   const isOwner = user?.username === product.sellerUsername
   const canBuy  = isAuthenticated && !isOwner
+  const averageRating = summary?.averageRating ?? summary?.avgRating ?? 0
+  const totalReviews = summary?.totalReviews ?? summary?.reviewCount ?? reviews.length
 
   return (
     <div className="page">
@@ -90,6 +204,11 @@ export default function ProductDetail() {
                 <p className="detail-meta" style={{ marginBottom: 16 }}>
                   {new Date(product.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </p>
+                <div className="review-summary-inline">
+                  <strong>{Number(averageRating || 0).toFixed(1)}</strong>
+                  <span> / 5</span>
+                  <span className="text-secondary"> ({totalReviews} reviews)</span>
+                </div>
                 {product.stockCount > 0 ? (
                   <span className="badge badge-complete" style={{ marginBottom: 12, display: 'inline-block' }}>In Stock ({product.stockCount})</span>
                 ) : (
@@ -99,6 +218,106 @@ export default function ProductDetail() {
                 <p style={{ fontSize: '0.9rem', lineHeight: 1.75, color: 'var(--text-secondary)' }}>
                   {product.description}
                 </p>
+              </div>
+            </div>
+
+            <div className="card mt-20">
+              <div className="card-body">
+                <div className="flex-between mb-12" style={{ alignItems: 'flex-end' }}>
+                  <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Customer Reviews</h2>
+                  <span className="text-sm text-secondary">Average: {Number(averageRating || 0).toFixed(1)}/5</span>
+                </div>
+
+                {isAuthenticated ? (
+                  <form onSubmit={handleReviewSubmit} className="review-form mb-20">
+                    {reviewSuccess && <div className="alert alert-success">{reviewSuccess}</div>}
+                    {(reviewFormError || reviewError) && <div className="alert alert-error">{reviewFormError || reviewError}</div>}
+
+                    <div className="form-group" style={{ marginBottom: 12 }}>
+                      <label className="form-label">Your Rating</label>
+                      <select
+                        className="form-control"
+                        value={rating}
+                        onChange={(e) => setRating(Number(e.target.value))}
+                        disabled={submittingReview}
+                      >
+                        <option value={5}>5 - Excellent</option>
+                        <option value={4}>4 - Good</option>
+                        <option value={3}>3 - Average</option>
+                        <option value={2}>2 - Poor</option>
+                        <option value={1}>1 - Bad</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 12 }}>
+                      <label className="form-label">Your Comment</label>
+                      <textarea
+                        className="form-control"
+                        rows={3}
+                        placeholder="Share your experience about this product"
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        disabled={submittingReview}
+                      />
+                    </div>
+
+                    <div className="flex gap-8">
+                      <button className="btn btn-primary" type="submit" disabled={submittingReview}>
+                        {submittingReview ? 'Saving…' : editingReviewId ? 'Update Review' : 'Submit Review'}
+                      </button>
+                      {editingReviewId && (
+                        <button className="btn btn-secondary" type="button" onClick={cancelEditReview} disabled={submittingReview}>
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                ) : (
+                  <div className="alert" style={{ background: '#f8f9fb', borderColor: 'var(--border)' }}>
+                    <Link to="/login">Sign in</Link> to write a review.
+                  </div>
+                )}
+
+                {reviewLoading ? (
+                  <Spinner />
+                ) : reviews.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '28px 10px' }}>
+                    <h3>No reviews yet</h3>
+                    <p>Be the first one to review this product.</p>
+                  </div>
+                ) : (
+                  <div className="review-list">
+                    {reviews.map((review) => {
+                      const reviewUsername = getReviewUsername(review)
+                      const canManage = isAdmin || user?.username === reviewUsername
+
+                      return (
+                        <div key={review.id} className="review-item">
+                          <div className="review-head">
+                            <div>
+                              <div className="review-user">{reviewUsername}</div>
+                              <div className="review-date">{formatReviewDate(review.createdAt)}</div>
+                            </div>
+                            <div className="review-rating">{'★'.repeat(review.rating || 0)}{'☆'.repeat(5 - (review.rating || 0))}</div>
+                          </div>
+
+                          {review.comment && <p className="review-comment">{review.comment}</p>}
+
+                          {canManage && (
+                            <div className="flex gap-8 mt-8">
+                              <button className="btn btn-secondary btn-sm" onClick={() => startEditReview(review)}>
+                                Edit
+                              </button>
+                              <button className="btn btn-danger btn-sm" onClick={() => handleDeleteReview(review.id)}>
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </div>
