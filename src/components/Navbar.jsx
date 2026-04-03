@@ -12,6 +12,7 @@ export default function Navbar() {
     navigate('/login')
   }
 //test ruleset
+//ahah
   return (
     <nav className="navbar">
       <div className="container navbar-inner">
