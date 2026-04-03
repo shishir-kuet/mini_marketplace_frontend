@@ -521,6 +521,63 @@ tbody tr:hover { background: #fafbfc; }
   margin-top: 8px;
 }
 
+.review-summary-inline {
+  margin-bottom: 12px;
+  font-size: 0.92rem;
+}
+
+.review-form {
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  background: #fff;
+}
+
+.review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.review-user {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.review-date {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.review-rating {
+  letter-spacing: 1px;
+  color: #b45309;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.review-comment {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
 /* ─── Order Card ─── */
 .order-card {
   background: var(--surface);
