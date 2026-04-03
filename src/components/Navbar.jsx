@@ -11,7 +11,7 @@ export default function Navbar() {
     logout()
     navigate('/login')
   }
-//test
+//test ruleset
   return (
     <nav className="navbar">
       <div className="container navbar-inner">
