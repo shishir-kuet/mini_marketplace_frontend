@@ -11,7 +11,7 @@ export default function Navbar() {
     logout()
     navigate('/login')
   }
-
+//test
   return (
     <nav className="navbar">
       <div className="container navbar-inner">
