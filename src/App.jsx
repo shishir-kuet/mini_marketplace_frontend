@@ -27,6 +27,7 @@ export default function App() {
         <Navbar />
         <Routes>
           {/* Public */}
+          <Route path="/index.html"     element={<Navigate to="/" replace />} />
           <Route path="/"               element={<Home />} />
           <Route path="/login"          element={<Login />} />
           <Route path="/register"       element={<Register />} />
